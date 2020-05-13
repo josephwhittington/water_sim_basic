@@ -177,10 +177,16 @@
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Procedural.cpp" />
+    <ClCompile Include="SDLInput.cpp" />
+    <ClCompile Include="WTime.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="macros.h" />
+    <ClInclude Include="Procedural.h" />
+    <ClInclude Include="SDLInput.h" />
+    <ClInclude Include="WTime.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="cube_vs.hlsl">

@@ -10,6 +10,8 @@
 // Shader Headers
 
 #include "Camera.h"
+#include "WTime.h"
+#include "Procedural.h"
 #include "macros.h"
 
 // Namespaces
@@ -18,6 +20,9 @@ using namespace DirectX;
 // Defines
 #define SCREEN_WIDTH 1366
 #define SCREEN_HEIGHT 800
+
+#define MOVE_THRESH 20
+#define ROTATION_THRESH .1
 
 // D3D11 Stuff
 ID3D11Device* g_Device;
@@ -50,12 +55,6 @@ struct WorldViewProjection {
 	XMFLOAT4X4 ProjectionMatrix;
 } WORLD;
 
-struct Vertex
-{
-	XMFLOAT3 position;
-	XMFLOAT3 color;
-};
-
 struct Cube
 {
 	// Vertices
@@ -73,6 +72,7 @@ struct Cube
 
 FPSCamera camera;
 Cube cube;
+WTime g_time;
 // Custom stuff
 
 // Forward declarations
@@ -218,8 +218,13 @@ int main(int argc, char** argv)
 	ASSERT_HRESULT_SUCCESS(result);
 
 	// Main loop
+	g_time.ResetTime();
 	while (RUNNING)
 	{
+		// Timing
+		g_time.Update();
+		double dt = g_time.deltaTime;
+
 		// Event check
 		SDL_Event event;
 		while (SDL_PollEvent(&event))
@@ -240,6 +245,39 @@ int main(int argc, char** argv)
 				{
 					g_fullscreen = true;
 					SDL_SetWindowFullscreen(m_window, SDL_WINDOW_FULLSCREEN);
+				}
+				// Movement
+				else if (event.key.keysym.scancode == SDL_SCANCODE_W)
+				{
+					XMFLOAT3 pos = camera.GetLook();
+					pos.x *= MOVE_THRESH * dt;
+					pos.y *= MOVE_THRESH * dt;
+					pos.z *= MOVE_THRESH * dt;
+					camera.Move(pos);
+				} 
+				else if (event.key.keysym.scancode == SDL_SCANCODE_S)
+				{
+					XMFLOAT3 pos = camera.GetLook();
+					pos.x *= -MOVE_THRESH * dt;
+					pos.y *= -MOVE_THRESH * dt;
+					pos.z *= -MOVE_THRESH * dt;
+					camera.Move(pos);
+				}
+				else if (event.key.keysym.scancode == SDL_SCANCODE_A)
+				{
+					XMFLOAT3 pos = camera.GetRight();
+					pos.x *= MOVE_THRESH * dt;
+					pos.y *= MOVE_THRESH * dt;
+					pos.z *= MOVE_THRESH * dt;
+					camera.Move(pos);
+				}
+				else if (event.key.keysym.scancode == SDL_SCANCODE_D)
+				{
+					XMFLOAT3 pos = camera.GetRight();
+					pos.x *= -MOVE_THRESH * dt;
+					pos.y *= -MOVE_THRESH * dt;
+					pos.z *= -MOVE_THRESH * dt;
+					camera.Move(pos);
 				}
 			}
 			// Input handling
