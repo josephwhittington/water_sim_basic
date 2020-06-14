@@ -2,15 +2,19 @@
 #include <vector>
 
 #include "SDL.h"
-#include "SDL_syswm.h"
+#include "SDL_syswm.h" //  Needed for window pointer
 
 // Shader Headers
 #include "shaders/cube_vs.csh"
 #include "shaders/cube_ps.csh"
+
+#include "shaders/water_vs.csh"
+#include "shaders/water_ps.csh"
 // Shader Headers
 
 #include "Camera.h"
 #include "WTime.h"
+#include "Input.h"
 #include "Procedural.h"
 
 // Namespaces
@@ -20,7 +24,7 @@ using namespace DirectX;
 #define SCREEN_WIDTH 1366
 #define SCREEN_HEIGHT 800
 
-#define MOVE_THRESH 20
+#define MOVE_THRESH 50
 #define ROTATION_THRESH .1
 
 // D3D11 Stuff
@@ -52,12 +56,23 @@ struct WorldViewProjection {
 	XMFLOAT4X4 WorldMatrix;
 	XMFLOAT4X4 ViewMatrix;
 	XMFLOAT4X4 ProjectionMatrix;
+	float time;
+	XMFLOAT3 padding;
 } WORLD;
 
 FPSCamera camera;
 Cube cube;
+HighDefinitionPlane hplane;
 WTime g_time;
+Input input;
+
+float time_in_seconds = 0;
 // Custom stuff
+
+// Functions
+void DrawCube(Cube& _cube);
+void DrawHPPlane(HighDefinitionPlane& _plane);
+
 
 int main(int argc, char** argv)
 {
@@ -70,7 +85,7 @@ int main(int argc, char** argv)
 	}
 
 	// Create window
-	SDL_Window* m_window = SDL_CreateWindow("SDLTemplate",
+	SDL_Window* m_window = SDL_CreateWindow("Water Sim",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
 
@@ -154,7 +169,8 @@ int main(int argc, char** argv)
 	result = g_Device->CreateRasterizerState(&rdesc, &rasterizerStateWireframe);
 	ASSERT_HRESULT_SUCCESS(result);
 
-	g_DeviceContext->RSSetState(rasterizerStateDefault);
+	g_DeviceContext->RSSetState(rasterizerStateWireframe);
+	//g_DeviceContext->RSSetState(rasterizerStateDefault);
 
 	// Initialize camera
 	camera.SetPosition(XMFLOAT3(0, 1.5, -5));
@@ -162,6 +178,7 @@ int main(int argc, char** argv)
 	camera.SetFOV(45);
 
 	Procedural::ConstructCube(g_Device, cube, cube_vs, cube_ps, sizeof(cube_vs), sizeof(cube_ps));
+	Procedural::ConstructHighDefPlane(g_Device, hplane, water_vs, water_ps, sizeof(water_vs), sizeof(water_ps));
 
 	g_DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	// Create constant buffer
@@ -204,68 +221,53 @@ int main(int argc, char** argv)
 		// Timing
 		g_time.Update();
 		double dt = g_time.deltaTime;
+		time_in_seconds += dt;
 
-		// Event check
-		SDL_Event event;
-		while (SDL_PollEvent(&event))
+		RUNNING = input.ProcessInput(dt);
+
+		if (input.IsKeyDown(SDL_SCANCODE_F).value && g_fullscreen)
 		{
-			// Input handling
-			if (event.type == SDL_QUIT)
-				RUNNING = false;
-			else if (event.type == SDL_KEYDOWN)
-			{
-				if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
-					RUNNING = false;
-				else if (event.key.keysym.scancode == SDL_SCANCODE_F && g_fullscreen)
-				{
-					g_fullscreen = false;
-					SDL_SetWindowFullscreen(m_window, 0);
-				}
-				else if (event.key.keysym.scancode == SDL_SCANCODE_F && !g_fullscreen)
-				{
-					g_fullscreen = true;
-					SDL_SetWindowFullscreen(m_window, SDL_WINDOW_FULLSCREEN);
-				}
-				// Movement
-				else if (event.key.keysym.scancode == SDL_SCANCODE_W)
-				{
-					XMFLOAT3 pos = camera.GetLook();
-					pos.x *= MOVE_THRESH * dt;
-					pos.y *= MOVE_THRESH * dt;
-					pos.z *= MOVE_THRESH * dt;
-					camera.Move(pos);
-				} 
-				else if (event.key.keysym.scancode == SDL_SCANCODE_S)
-				{
-					XMFLOAT3 pos = camera.GetLook();
-					pos.x *= -MOVE_THRESH * dt;
-					pos.y *= -MOVE_THRESH * dt;
-					pos.z *= -MOVE_THRESH * dt;
-					camera.Move(pos);
-				}
-				else if (event.key.keysym.scancode == SDL_SCANCODE_A)
-				{
-					XMFLOAT3 pos = camera.GetRight();
-					pos.x *= MOVE_THRESH * dt;
-					pos.y *= MOVE_THRESH * dt;
-					pos.z *= MOVE_THRESH * dt;
-					camera.Move(pos);
-				}
-				else if (event.key.keysym.scancode == SDL_SCANCODE_D)
-				{
-					XMFLOAT3 pos = camera.GetRight();
-					pos.x *= -MOVE_THRESH * dt;
-					pos.y *= -MOVE_THRESH * dt;
-					pos.z *= -MOVE_THRESH * dt;
-					camera.Move(pos);
-				}
-			}
-			// Input handling
+			g_fullscreen = false;
+			SDL_SetWindowFullscreen(m_window, 0);
 		}
-
-		// Rotation
-		g_rotation += .001;
-		if (g_rotation > 360) g_rotation = 0;
+		else if (input.IsKeyDown(SDL_SCANCODE_F).value && !g_fullscreen)
+		{
+			g_fullscreen = true;
+			SDL_SetWindowFullscreen(m_window, SDL_WINDOW_FULLSCREEN);
+		}
+		// Movement
+		else if (input.IsKeyDown(SDL_SCANCODE_W).value)
+		{
+			XMFLOAT3 pos = camera.GetLook();
+			pos.x *= MOVE_THRESH * dt;
+			pos.y *= MOVE_THRESH * dt;
+			pos.z *= MOVE_THRESH * dt;
+			camera.Move(pos);
+		}
+		else if (input.IsKeyDown(SDL_SCANCODE_S).value)
+		{
+			XMFLOAT3 pos = camera.GetLook();
+			pos.x *= -MOVE_THRESH * dt;
+			pos.y *= -MOVE_THRESH * dt;
+			pos.z *= -MOVE_THRESH * dt;
+			camera.Move(pos);
+		}
+		else if (input.IsKeyDown(SDL_SCANCODE_A).value)
+		{
+			XMFLOAT3 pos = camera.GetRight();
+			pos.x *= MOVE_THRESH * dt;
+			pos.y *= MOVE_THRESH * dt;
+			pos.z *= MOVE_THRESH * dt;
+			camera.Move(pos);
+		}
+		else if (input.IsKeyDown(SDL_SCANCODE_D).value)
+		{
+			XMFLOAT3 pos = camera.GetRight();
+			pos.x *= -MOVE_THRESH * dt;
+			pos.y *= -MOVE_THRESH * dt;
+			pos.z *= -MOVE_THRESH * dt;
+			camera.Move(pos);
+		}
 
 		// Output merger
 		ID3D11RenderTargetView* tempRTV[] = { g_RenderTargetView };
@@ -277,46 +279,16 @@ int main(int argc, char** argv)
 
 		g_DeviceContext->RSSetViewports(1, &g_viewport);
 
-		// Draw the cube
-		// World
-		//XMMATRIX temp = XMMatrixIdentity();
-		XMMATRIX temp = XMMatrixRotationY(g_rotation);
-		XMStoreFloat4x4(&WORLD.WorldMatrix, temp);
-
-		// View
-		camera.GetViewMatrix(temp);
-		XMStoreFloat4x4(&WORLD.ViewMatrix, temp);
-
-		// Proj
-		temp = XMMatrixPerspectiveFovLH(camera.GetFOV(), g_aspectRatio, 0.1f, 1000);
-		XMStoreFloat4x4(&WORLD.ProjectionMatrix, temp);
-
-		// Send the matrix to constant buffer
-		D3D11_MAPPED_SUBRESOURCE gpuBuffer;
-		HRESULT result = g_DeviceContext->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &gpuBuffer);
-		memcpy(gpuBuffer.pData, &WORLD, sizeof(WORLD));
-		g_DeviceContext->Unmap(constantBuffer, 0);
-		// Connect constant buffer to the pipeline
-		ID3D11Buffer* teapotCBuffers[] = { constantBuffer };
-		g_DeviceContext->VSSetConstantBuffers(0, ARRAYSIZE(teapotCBuffers), teapotCBuffers);
-
-		UINT teapotstrides[] = { sizeof(Vertex) };
-		UINT teapotoffsets[] = { 0 };
-		ID3D11Buffer* teapotVertexBuffers[] = { cube.vertex_buffer };
-		g_DeviceContext->IASetVertexBuffers(0, ARRAYSIZE(teapotVertexBuffers), teapotVertexBuffers, teapotstrides, teapotoffsets);
-		g_DeviceContext->IASetIndexBuffer(cube.index_buffer, DXGI_FORMAT_R32_UINT, 0);
-		g_DeviceContext->VSSetShader(cube.vertex_shader, 0, 0);
-		g_DeviceContext->PSSetShader(cube.pixel_shader, 0, 0);
-		g_DeviceContext->IASetInputLayout(cube.input_layout);
-
-		g_DeviceContext->DrawIndexed(cube.indices.size(), 0, 0);
-		// Draw the cube
+		// Draw stuff here
+		// DrawCube(cube);
+		DrawHPPlane(hplane);
 
 		g_Swapchain->Present(0, 0);
 	}
 
 	// Cleanup
 	Procedural::CleanupCube(cube);
+	Procedural::CleanUpHighDefPlane(hplane);
 
 	// Delete
 	D3DSAFERELEASE(g_Swapchain);
@@ -338,4 +310,82 @@ int main(int argc, char** argv)
 	SDL_Quit();
 
 	return EXIT_SUCCESS;
+}
+
+void DrawCube(Cube& _cube)
+{
+	// Draw the cube
+		// World
+		//XMMATRIX temp = XMMatrixIdentity();
+	XMMATRIX temp = XMMatrixRotationY(g_rotation);
+	XMStoreFloat4x4(&WORLD.WorldMatrix, temp);
+
+	// View
+	camera.GetViewMatrix(temp);
+	XMStoreFloat4x4(&WORLD.ViewMatrix, temp);
+
+	// Proj
+	temp = XMMatrixPerspectiveFovLH(camera.GetFOV(), g_aspectRatio, 0.1f, 1000);
+	XMStoreFloat4x4(&WORLD.ProjectionMatrix, temp);
+
+	// Send the matrix to constant buffer
+	D3D11_MAPPED_SUBRESOURCE gpuBuffer;
+	HRESULT result = g_DeviceContext->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &gpuBuffer);
+	memcpy(gpuBuffer.pData, &WORLD, sizeof(WORLD));
+	g_DeviceContext->Unmap(constantBuffer, 0);
+	// Connect constant buffer to the pipeline
+	ID3D11Buffer* teapotCBuffers[] = { constantBuffer };
+	g_DeviceContext->VSSetConstantBuffers(0, ARRAYSIZE(teapotCBuffers), teapotCBuffers);
+
+	UINT teapotstrides[] = { sizeof(Vertex) };
+	UINT teapotoffsets[] = { 0 };
+	ID3D11Buffer* teapotVertexBuffers[] = { _cube.vertex_buffer };
+	g_DeviceContext->IASetVertexBuffers(0, ARRAYSIZE(teapotVertexBuffers), teapotVertexBuffers, teapotstrides, teapotoffsets);
+	g_DeviceContext->IASetIndexBuffer(_cube.index_buffer, DXGI_FORMAT_R32_UINT, 0);
+	g_DeviceContext->VSSetShader(_cube.vertex_shader, 0, 0);
+	g_DeviceContext->PSSetShader(_cube.pixel_shader, 0, 0);
+	g_DeviceContext->IASetInputLayout(_cube.input_layout);
+
+	g_DeviceContext->DrawIndexed(_cube.indices.size(), 0, 0);
+	// Draw the cube
+}
+
+void DrawHPPlane(HighDefinitionPlane& _plane)
+{
+	// Draw the Plane
+	// World
+	//XMMATRIX temp = XMMatrixIdentity();
+	XMMATRIX temp = XMMatrixIdentity();
+	XMStoreFloat4x4(&WORLD.WorldMatrix, temp);
+
+	// View
+	camera.GetViewMatrix(temp);
+	XMStoreFloat4x4(&WORLD.ViewMatrix, temp);
+
+	// Proj
+	temp = XMMatrixPerspectiveFovLH(camera.GetFOV(), g_aspectRatio, 0.1f, 1000);
+	XMStoreFloat4x4(&WORLD.ProjectionMatrix, temp);
+
+	// Time
+	WORLD.time = time_in_seconds;
+
+	// Send the matrix to constant buffer
+	D3D11_MAPPED_SUBRESOURCE gpuBuffer;
+	HRESULT result = g_DeviceContext->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &gpuBuffer);
+	memcpy(gpuBuffer.pData, &WORLD, sizeof(WorldViewProjection));
+	g_DeviceContext->Unmap(constantBuffer, 0);
+	// Connect constant buffer to the pipeline
+	ID3D11Buffer* teapotCBuffers[] = { constantBuffer };
+	g_DeviceContext->VSSetConstantBuffers(0, ARRAYSIZE(teapotCBuffers), teapotCBuffers);
+
+	UINT teapotstrides[] = { sizeof(Vertex) };
+	UINT teapotoffsets[] = { 0 };
+	ID3D11Buffer* teapotVertexBuffers[] = { _plane.vertex_buffer };
+	g_DeviceContext->IASetVertexBuffers(0, ARRAYSIZE(teapotVertexBuffers), teapotVertexBuffers, teapotstrides, teapotoffsets);
+	g_DeviceContext->IASetIndexBuffer(_plane.index_buffer, DXGI_FORMAT_R32_UINT, 0);
+	g_DeviceContext->VSSetShader(_plane.vertex_shader, 0, 0);
+	g_DeviceContext->PSSetShader(_plane.pixel_shader, 0, 0);
+	g_DeviceContext->IASetInputLayout(_plane.input_layout);
+
+	g_DeviceContext->DrawIndexed(_plane.indices.size(), 0, 0);
 }
